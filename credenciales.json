@@ -1,0 +1,7 @@
+{
+    "dbname": "bot_db",
+    "user": "bot",
+    "password": "P455_bot_db",
+    "host": "192.168.20.13",
+    "port": 5432
+}

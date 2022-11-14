@@ -1,62 +1,38 @@
-from telebot import TeleBot
-from telebot.types import Message
+from telebot import TeleBot #Clase para instanciar Bot
+from telebot.types import Message #Clase que representa un Mensaje
+from telebot.types import ReplyKeyboardMarkup #Clase que modela un boton en teclado
+from tgbot.utils.database import Database #Clase de Conexion a BD Posgresql
+from tgbot.models.registro import Registro #Clase que modela un registro
+import tgbot.config as config #constantes
+import csv #Para manejo de csv
+import psycopg2 #Libreria para manejo de conexion a BD Posgresql
 
-class Reg_Entrada:
-    def __init__(self, hora):
-        self.hora = hora
-        self.site = None
-        self.prov = None
-        self.resp = None
-        self.work = None
-        self.telef = None
-        self.obs = None
 
-ingreso_dict = {}
+registro_dict = {}
 
 def any_user(message: Message, bot: TeleBot):
-    """
-    You can create a function and use parameter pass_bot.
-    """
+    """Mensaje enviado a cualquier usuario."""
     bot.send_message(message.chat.id, "Hello, user!")
 
-def _extract_unique_code(text):
-    return text.split()[1] if len(text.split()) > 1 else None
-
-def _get_username_from_storage(code):
-    return True
-
-def registrar_entrada(message: Message, bot: TeleBot):
-    """
-    Registrar entrada.
-    """
-    unique_code = _extract_unique_code(message.text)
-    if unique_code:  # if the '/start' command contains a unique_code
-        username = _get_username_from_storage(unique_code)
-        if username:  # if the username exists in our database
-            
-            msg = bot.reply_to(message, "Introduzca la hora de ingreso Formato hh:mm")
-            bot.register_next_step_handler(msg, process_hour_step, bot)
-        else:
-            bot.reply_to(message, "No se encontro usuario...")
-    else:
-        reply = "Solicitar a su Superv. su acceso"
-        bot.send_message(message.chat.id,reply)
+def registrar_evento(message: Message, bot: TeleBot):
+    """Solicitar hora."""
+    msg = bot.reply_to(message, "Introduzca la hora de ingreso Formato hh:mm")
+    bot.register_next_step_handler(msg, process_hour_step, bot)
 
 def process_hour_step(message: Message, bot: TeleBot):
+    """Registrar hora."""
     chat_id = message.chat.id
     hora = message.text
-    ingreso = Reg_Entrada(hora)
-    ingreso_dict[chat_id] = ingreso
+    ingreso = Registro(hora)
+    registro_dict[chat_id] = ingreso
 
     msg = bot.reply_to(message, "Introduzca Site: Sitio RBS o Nodo/Tamper")
     bot.register_next_step_handler(msg, process_site_step, bot)
 
 def process_site_step(message: Message, bot: TeleBot):
-    """
-    Registrar site.
-    """
+    """Registrar site."""
     chat_id = message.chat.id
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     site = message.text
     ingreso.site = site
 
@@ -64,20 +40,19 @@ def process_site_step(message: Message, bot: TeleBot):
     bot.register_next_step_handler(msg, process_provisioner_step, bot)
 
 def process_provisioner_step(message: Message, bot: TeleBot):
-    """
-    Registrar provisioner.
-    """
+    """Registrar empresa."""
     chat_id = message.chat.id
     prov = message.text
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     ingreso.prov = prov
 
     msg = bot.reply_to(message, "Introduzca Responsible: Responsable")
     bot.register_next_step_handler(msg, process_responsible_step, bot)
 
 def process_responsible_step(message: Message, bot: TeleBot):
+    """Registrar Responsable."""
     chat_id = message.chat.id
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     resp = message.text
     ingreso.resp = resp
 
@@ -85,8 +60,9 @@ def process_responsible_step(message: Message, bot: TeleBot):
     bot.register_next_step_handler(msg, process_work_step, bot)
 
 def process_work_step(message: Message, bot: TeleBot):
+    """Registrar trabajo."""
     chat_id = message.chat.id
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     work = message.text
     ingreso.work = work
 
@@ -94,8 +70,9 @@ def process_work_step(message: Message, bot: TeleBot):
     bot.register_next_step_handler(msg, process_telephone_step, bot)
 
 def process_telephone_step(message: Message, bot: TeleBot):
+    """Registrar telefono."""
     chat_id = message.chat.id
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     telef = message.text
     ingreso.telef = telef
 
@@ -103,11 +80,12 @@ def process_telephone_step(message: Message, bot: TeleBot):
     bot.register_next_step_handler(msg, process_obs_step, bot)
 
 def process_obs_step(message: Message, bot: TeleBot):
+    """Registrar observaciones y guardar datos"""
     chat_id = message.chat.id
-    ingreso = ingreso_dict[chat_id]
+    ingreso = registro_dict[chat_id]
     obs = message.text
     ingreso.obs = obs
-    bot.send_message(chat_id, f"Datos:\nhora: {ingreso.hora}\
+    bot.send_message(chat_id, f"Confirmar si desea registrar sus datos:\nhora: {ingreso.hora}\
         \nsite:{ingreso.site}\
         \nProvisioner: {ingreso.prov}\
         \nResponsible: {ingreso.resp}\
@@ -115,3 +93,39 @@ def process_obs_step(message: Message, bot: TeleBot):
         \nTelefono: {ingreso.telef}\
         \nObservaciones: {ingreso.obs}\
         ")
+
+    #markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    markup = ReplyKeyboardMarkup(one_time_keyboard=True)
+    markup.add('Si', 'No')
+    msg = bot.send_message(chat_id, '¿Guardar Datos?', reply_markup=markup)
+    msg = bot.register_next_step_handler(msg, process_save_step, bot)
+
+def process_save_step(message: Message, bot: TeleBot):
+    chat_id = message.chat.id
+    ingreso = registro_dict[chat_id]
+    resp = message.text
+    if resp != '' and resp == 'Si':
+        lista_reg = [ingreso.hora, ingreso.site, ingreso.prov, ingreso.resp, ingreso.work, ingreso.telef, ingreso.obs]
+        escribir_csv(lista_reg, config.DOC_CSV)
+        msg = bot.send_message(chat_id, 'Sus datos fueron registrados con exitos.!!')
+    else:
+        bot.send_message(chat_id,"Registro Cancelado")
+
+def escribir_db(db: Database, reg: Registro):
+    try:
+        db = Database()
+        with db.get_conn().cursor() as cursor:
+            query = "INSERT INTO red_entrada (hora, sitio, empresa, responsable, trabajo, telef, observ) \
+            VALUES (%s, %s, %s, %s, %s, %s, %s);"
+            cursor.execute(query,(reg.hora, reg.site, reg.prov, reg.resp, reg.work, reg.telef, reg.obs))
+        db.get_conn.commit()
+    except psycopg2.Error as e:
+        print("Ocurrió un error al insertar: ", e)
+    finally:
+        del db
+
+def escribir_csv(lista, file_out):
+    """Guardar datos en formato csv."""
+    with open(file_out,'a', newline='') as archivo:
+        writer = csv.writer(archivo)
+        writer.writerow(lista)
